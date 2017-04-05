@@ -1,41 +1,59 @@
 'use strict';
 
-const nodemailer = require('nodemailer');
-const smtpTransport = require('nodemailer-smtp-transport');
-const config = require('./config');
+require('dotenv').load();
 
-const fromEmail = config.from;
-const user = config.user;
-const pass = config.pass;
+const AWS = require('aws-sdk');
+const nodemailer = require('nodemailer');
+const ses = require('nodemailer-ses-transport');
+
+const transporter = nodemailer.createTransport(ses({
+    accessKeyId: process.env.AWS_KEY,
+    secretAccessKey: process.env.AWS_SECRET
+}));
+
+const fromEmail = process.env.FROM_EMAIL;
+const toEmail = process.env.TO_EMAIL;
 
 exports.handler = (event, context, cb) => {
 
-  const type = event.type;
-  const message = event.message;
+  const senderName = event.name;
+  const senderEmail = event.email;
+  let message = event.message;
 
-  const transporter = nodemailer.createTransport(smtpTransport({
-    host: 'email-smtp.us-east-1.amazonaws.com',
-    port: 587,
-    auth: {
-        user: user,
-        pass: pass
-    }
-  }));
+  // Format the message a replace newlines with <br>
+  // Convert newlines in the message
+  if (message != null) {
+      message = message
+        .replace("\r\n", "<br />")
+        .replace("\r", "<br />")
+        .replace("\n", "<br />");
+  }
 
-  const text = 'Text Goes here';
+  const subject = `Contact Us Request From ${senderName}`;
+  const htmlBody = `
+    <html>
+      <body>
+        <p><b>New Contact Us Request</b></p>
+        <p><b>From:</b> ${senderName} <${senderEmail}></p>
+        <br>
+        <p>${message}</p>
+      </body>
+    </html>
+  `;
 
-	const mailOptions = {
+  const mailOpts = {
     from: fromEmail,
-    to: 'jj@getquorum.com',
-    subject: 'TEST',
-    text: text
-	};
+    to: toEmail,
+    replyTo: senderEmail,
+    subject: subject,
+    html: htmlBody
+  };
 
-	transporter.sendMail(mailOptions, function(error, info){
+  transporter.sendMail(mailOpts, function(error, info){
       if(error){
           console.log(error);
       }
-
+      console.log('email sent', mailOpts);
       cb(null, info);
   });
 
